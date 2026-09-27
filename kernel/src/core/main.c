@@ -16,18 +16,7 @@ void minemu_kernel_main(const struct minemu_boot_info *boot_info) {
         minemu_fail_stop();
     }
 
-    uart_put_character('h');
-    uart_put_character('e');
-    uart_put_character('l');
-    uart_put_character('l');
-    uart_put_character('o');
-    uart_put_character(' ');
-    uart_put_character('w');
-    uart_put_character('o');
-    uart_put_character('r');
-    uart_put_character('l');
-    uart_put_character('d');
-    uart_put_character('\n');
+    uart_printf("Hello World\n");
 
     minemu_trace_event(1);
     minemu_fail_stop();
