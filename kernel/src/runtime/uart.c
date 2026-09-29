@@ -1,6 +1,17 @@
 #include "minemu/uart.h"
 #include "minemu/platform.h"
 
+// diddy buffer
+char uart_buffer[1024] = { 0 };
+size_t buffer_offset = 0;
+
+void uart0_irq_handler(){
+  while ((MINEMU_UART0-> status & MINEMU_UART_STATUS_RX_READY) != 0){
+    uart_buffer[buffer_offset] = MINEMU_UART0->rx_data;
+    buffer_offset++;
+  }
+}
+
 void uart_put_character(char c){
   while ((MINEMU_UART0->status & MINEMU_UART_STATUS_TX_READY) == 0){
   }

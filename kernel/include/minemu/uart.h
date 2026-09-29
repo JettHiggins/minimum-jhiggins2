@@ -4,5 +4,7 @@
 void uart_put_character(char c);
 int uart_printf(const char *format, ...);
 
+void uart0_irq_handler();
+
 #endif
 
