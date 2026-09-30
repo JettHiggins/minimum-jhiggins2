@@ -1,7 +1,6 @@
 #include "minemu/boot.h"
 #include "minemu/trap.h"
 #include "minemu/trace.h"
-#include "minemu/uart.h"
 #include "minemu/irq.h"
 #include "minemu/msh.h"
 #include "minemu/platform.h"
@@ -18,9 +17,6 @@ void minemu_kernel_main(const struct minemu_boot_info *boot_info) {
         minemu_trace_event(UINT32_C(0xb007bad0));
         minemu_fail_stop();
     }
-
-    uart_printf("hello world\n");
-    minemu_trace_event(1);
 
     MINEMU_UART0->control = MINEMU_UART_CONTROL_RX_IRQ_ENABLE;
     MINEMU_INTERRUPT->enable |= (UINT32_C(1) << MINEMU_IRQ_UART0);
