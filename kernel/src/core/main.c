@@ -19,7 +19,8 @@ void minemu_kernel_main(const struct minemu_boot_info *boot_info) {
         minemu_fail_stop();
     }
 
-    uart_printf("hello horld\n");
+    uart_printf("hello world\n");
+    minemu_trace_event(1);
 
     MINEMU_UART0->control = MINEMU_UART_CONTROL_RX_IRQ_ENABLE;
     MINEMU_INTERRUPT->enable |= (UINT32_C(1) << MINEMU_IRQ_UART0);
