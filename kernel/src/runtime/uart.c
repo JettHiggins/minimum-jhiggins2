@@ -7,7 +7,6 @@ size_t buffer_offset = 0;
 size_t read_offset = 0;
 
 char get_byte(){
-  uart_printf("Uart status: %d\nBuffer offset%d\n", (MINEMU_UART0-> status & MINEMU_UART_STATUS_RX_READY), buffer_offset);
   if (buffer_offset == read_offset){
     return 0;
   }

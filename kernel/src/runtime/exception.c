@@ -26,12 +26,6 @@ __attribute__((weak)) struct minemu_trap_frame *minemu_svc_dispatch(
     minemu_fail_stop();
 }
 
-__attribute__((weak)) struct minemu_trap_frame *minemu_irq_dispatch(
-    struct minemu_trap_frame *frame) {
-    (void)frame;
-    minemu_fail_stop();
-}
-
 __attribute__((weak)) void minemu_undefined_dispatch(struct minemu_trap_frame *frame) {
     (void)frame;
     minemu_fail_stop();
