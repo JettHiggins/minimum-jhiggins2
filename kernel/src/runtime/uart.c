@@ -2,11 +2,20 @@
 #include "minemu/platform.h"
 
 // diddy buffer
-char uart_buffer[1024] = { 0 };
+char uart_buffer[256] = { 0 };
 size_t buffer_offset = 0;
+size_t read_offset = 0;
+
+char get_byte(){
+  uart_printf("Uart status: %d\nBuffer offset%d\n", (MINEMU_UART0-> status & MINEMU_UART_STATUS_RX_READY), buffer_offset);
+  if (buffer_offset == read_offset){
+    return 0;
+  }
+  return uart_buffer[read_offset++];
+}
 
 void uart0_irq_handler(){
-  while ((MINEMU_UART0-> status & MINEMU_UART_STATUS_RX_READY) != 0){
+  while (MINEMU_UART0-> status & MINEMU_UART_STATUS_RX_READY){
     uart_buffer[buffer_offset] = MINEMU_UART0->rx_data;
     buffer_offset++;
   }

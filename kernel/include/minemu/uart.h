@@ -6,5 +6,7 @@ int uart_printf(const char *format, ...);
 
 void uart0_irq_handler();
 
+char get_byte();
+
 #endif
 

@@ -2,6 +2,9 @@
 #include "minemu/trap.h"
 #include "minemu/trace.h"
 #include "minemu/uart.h"
+#include "minemu/irq.h"
+#include "minemu/msh.h"
+#include "minemu/platform.h"
 
 void minemu_kernel_main(const struct minemu_boot_info *boot_info) {
     if ((uintptr_t)boot_info != MINEMU_BOOT_INFO_VADDR ||
@@ -18,6 +21,10 @@ void minemu_kernel_main(const struct minemu_boot_info *boot_info) {
 
     uart_printf("Hello World\n");
 
-    minemu_trace_event(1);
-    minemu_fail_stop();
+    MINEMU_UART0->control = MINEMU_UART_CONTROL_RX_IRQ_ENABLE;
+    MINEMU_INTERRUPT->enable |= (UINT32_C(1) << MINEMU_IRQ_UART0);
+
+    minemu_irq_enable();
+
+    msh();
 }
