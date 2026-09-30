@@ -16,7 +16,7 @@ void minemu_kernel_main(const struct minemu_boot_info *boot_info) {
         minemu_fail_stop();
     }
 
-    uart_printf("Hello World\n");
+    uart_printf("hello world\n");
 
     minemu_trace_event(1);
     minemu_fail_stop();
