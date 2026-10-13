@@ -15,7 +15,8 @@
 #define USER_IMAGE_BASE UINT32_C(0x00400000)
 #define USER_STACK_BOTTOM UINT32_C(0x007ff000)
 #define USER_STACK_TOP UINT32_C(0x00800000)
-#define MAX_USER_IMAGE_PAGES 16U
+/* Four pages cover the HW2 programs without a large boot-time BSS clear. */
+#define MAX_USER_IMAGE_PAGES 4U
 #define SYSTEM_ROM_TABLE_COUNT 4U
 #define CPSR_MODE_MASK UINT32_C(0x1f)
 #define CPSR_MODE_USR UINT32_C(0x10)
