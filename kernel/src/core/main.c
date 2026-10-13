@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "minemu/hello_syscall.h"
+#include "minemu/user_abi.h"
 #include "minemu/boot.h"
 #include "minemu/mmu.h"
 #include "minemu/platform.h"
@@ -21,7 +21,6 @@
 #define CPSR_MODE_USR UINT32_C(0x10)
 #define CPSR_THUMB UINT32_C(0x20)
 #define A32_SVC_ZERO UINT32_C(0xef000000)
-#define TRACE_USER_SYSCALL UINT32_C(0x48454c10)
 
 static uint32_t system_rom_tables[SYSTEM_ROM_TABLE_COUNT][1024]
     __attribute__((aligned(MINEMU_PAGE_SIZE)));
@@ -32,7 +31,6 @@ static uint8_t user_stack[MINEMU_PAGE_SIZE] __attribute__((aligned(MINEMU_PAGE_S
 static uint32_t user_page_vaddrs[MAX_USER_IMAGE_PAGES];
 static uint32_t user_page_flags[MAX_USER_IMAGE_PAGES];
 static size_t user_page_count;
-static bool user_syscall_observed;
 
 void minemu_enter_user(uint32_t entry_vaddr, uint32_t stack_top) __attribute__((noreturn));
 
@@ -266,27 +264,110 @@ static bool load_user_module(const struct minemu_boot_info *boot_info,
     return true;
 }
 
+/* Validate the entire range before any peripheral operation has side effects. */
+static bool user_range_valid(uint32_t address, uint32_t length, uint32_t permissions) {
+    if (length == 0) {
+        return true;
+    }
+    if (address < USER_IMAGE_BASE || address >= USER_STACK_TOP ||
+        length > USER_STACK_TOP - address) {
+        return false;
+    }
+    uint32_t last_page = (address + length - 1U) & MINEMU_PTE_PAGE_MASK;
+    for (uint32_t page = address & MINEMU_PTE_PAGE_MASK;; page += MINEMU_PAGE_SIZE) {
+        uint32_t entry = user_page_table[(page >> 12) & 1023U];
+        uint32_t required = MINEMU_PTE_VALID | MINEMU_PTE_USER | permissions;
+        if ((entry & required) != required) {
+            return false;
+        }
+        if (page == last_page) {
+            return true;
+        }
+    }
+}
+
+static int32_t dispatch_ioctl(uint32_t fd, uint32_t request,
+                              uint32_t argument, uint32_t count) {
+    volatile struct minemu_uart_regs *uart = NULL;
+    bool read = false;
+    bool write = false;
+    bool status = false;
+    bool supplied_interface = false;
+    if (fd == MINEMU_FD_UART0 || fd == MINEMU_FD_UART1) {
+        uart = fd == MINEMU_FD_UART0 ? MINEMU_UART0 : MINEMU_UART1;
+        read = request == MINEMU_OP_UART_READ;
+        write = request == MINEMU_OP_UART_WRITE;
+    } else if (fd == MINEMU_FD_UART_IN || fd == MINEMU_FD_UART_OUT ||
+               fd == MINEMU_FD_UART_DIAG) {
+        supplied_interface = true;
+        uart = fd == MINEMU_FD_UART_DIAG ? MINEMU_UART1 : MINEMU_UART0;
+        read = fd == MINEMU_FD_UART_IN && request == MINEMU_IOCTL_UART_READ;
+        write = fd != MINEMU_FD_UART_IN && request == MINEMU_IOCTL_UART_WRITE;
+        status = request == MINEMU_IOCTL_UART_STATUS;
+    }
+    if (uart != NULL) {
+        if (status) {
+            return (int32_t)(uart->status & (MINEMU_IOCTL_UART_RX_READY |
+                                            MINEMU_IOCTL_UART_TX_READY));
+        }
+        if ((!read && !write) || count > INT32_MAX ||
+            (supplied_interface && count > MINEMU_IOCTL_MAX_TRANSFER) ||
+            !user_range_valid(argument, count,
+                              read ? MINEMU_PTE_WRITABLE : MINEMU_PTE_READABLE)) {
+            return MINEMU_IOCTL_ERROR;
+        }
+        uint8_t *buffer = (uint8_t *)(uintptr_t)argument;
+        uint32_t transferred = 0;
+        while (transferred < count) {
+            if (read) {
+                if ((uart->status & MINEMU_UART_STATUS_RX_READY) == 0) {
+                    break;
+                }
+                buffer[transferred] = (uint8_t)uart->rx_data;
+            } else {
+                while ((uart->status & MINEMU_UART_STATUS_TX_READY) == 0) {
+                    __asm__ volatile("nop");
+                }
+                uart->tx_data = buffer[transferred];
+            }
+            ++transferred;
+        }
+        return (int32_t)transferred;
+    }
+    if (fd == MINEMU_FD_RNG_TASK || fd == MINEMU_FD_RNG) {
+        bool homework = fd == MINEMU_FD_RNG_TASK;
+        if (request == (homework ? MINEMU_OP_RNG_SET_SEED : MINEMU_IOCTL_RNG_SEED)) {
+            MINEMU_RNG->seed = argument;
+            return 0;
+        }
+        bool next = request == (homework ? MINEMU_OP_RNG_GET_DATA : MINEMU_IOCTL_RNG_NEXT);
+        bool state = !homework && request == MINEMU_IOCTL_RNG_STATE;
+        if ((!next && !state) || (argument & 3U) != 0 ||
+            !user_range_valid(argument, sizeof(uint32_t), MINEMU_PTE_WRITABLE)) {
+            return MINEMU_IOCTL_ERROR;
+        }
+        *(uint32_t *)(uintptr_t)argument = next ? MINEMU_RNG->data : MINEMU_RNG->state;
+        return 0;
+    }
+    if ((fd == MINEMU_FD_TRACE_TASK && request == MINEMU_OP_TRACE_EVENT) ||
+        (fd == MINEMU_FD_TRACE && request == MINEMU_IOCTL_TRACE_EVENT)) {
+        minemu_trace_event(argument);
+        return 0;
+    }
+    return MINEMU_IOCTL_ERROR;
+}
+
 struct minemu_trap_frame *minemu_svc_dispatch(struct minemu_trap_frame *frame) {
-    uint32_t mode = frame->spsr & CPSR_MODE_MASK;
-    if (frame->exception_id != MINEMU_EXCEPTION_SVC || mode != CPSR_MODE_USR ||
-        (frame->spsr & CPSR_THUMB) != 0) {
-        frame->r[0] = (uint32_t)MINEMU_HELLO_SYSCALL_ERROR;
-        return frame;
+    int32_t result = MINEMU_IOCTL_ERROR;
+    if (frame->exception_id == MINEMU_EXCEPTION_SVC &&
+        (frame->spsr & (CPSR_MODE_MASK | CPSR_THUMB)) == CPSR_MODE_USR &&
+        (frame->fault_pc & 3U) == 0 && frame->return_lr == frame->fault_pc + 4U &&
+        user_range_valid(frame->fault_pc, 4U, MINEMU_PTE_READABLE | MINEMU_PTE_EXECUTABLE) &&
+        *(const uint32_t *)(uintptr_t)frame->fault_pc == A32_SVC_ZERO &&
+        frame->r[7] == MINEMU_SYSCALL_IOCTL) {
+        result = dispatch_ioctl(frame->r[0], frame->r[1], frame->r[2], frame->r[3]);
     }
-
-    uint32_t instruction = *(const uint32_t *)(uintptr_t)frame->fault_pc;
-    if (instruction != A32_SVC_ZERO || frame->r[7] != MINEMU_HELLO_SYSCALL_UART_PUTCHAR ||
-        frame->r[0] > UINT8_MAX) {
-        frame->r[0] = (uint32_t)MINEMU_HELLO_SYSCALL_ERROR;
-        return frame;
-    }
-
-    if (!user_syscall_observed) {
-        minemu_trace_event(TRACE_USER_SYSCALL);
-        user_syscall_observed = true;
-    }
-    MINEMU_UART0->tx_data = frame->r[0];
-    frame->r[0] = 0;
+    frame->r[0] = (uint32_t)result;
     return frame;
 }
 

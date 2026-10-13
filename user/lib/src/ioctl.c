@@ -24,22 +24,26 @@ int32_t ioctl(int fd, uint32_t request, ...) {
     va_list arguments;
 
     va_start(arguments, request);
-    switch (request) {
-    case MINEMU_IOCTL_UART_READ:
-    case MINEMU_IOCTL_UART_WRITE:
+    if ((fd == MINEMU_FD_UART0 || fd == MINEMU_FD_UART1) &&
+        (request == MINEMU_OP_UART_READ || request == MINEMU_OP_UART_WRITE)) {
+        argument0 = (uint32_t)(uintptr_t)va_arg(arguments, char *);
+        argument1 = (uint32_t)va_arg(arguments, int);
+    } else if (fd == MINEMU_FD_RNG_TASK && request == MINEMU_OP_RNG_GET_DATA) {
+        argument0 = (uint32_t)(uintptr_t)va_arg(arguments, unsigned int *);
+    } else if ((fd == MINEMU_FD_RNG_TASK && request == MINEMU_OP_RNG_SET_SEED) ||
+               (fd == MINEMU_FD_TRACE_TASK && request == MINEMU_OP_TRACE_EVENT)) {
+        argument0 = va_arg(arguments, unsigned int);
+    } else if ((fd == MINEMU_FD_UART_IN && request == MINEMU_IOCTL_UART_READ) ||
+               ((fd == MINEMU_FD_UART_OUT || fd == MINEMU_FD_UART_DIAG) &&
+                request == MINEMU_IOCTL_UART_WRITE)) {
         argument0 = (uint32_t)(uintptr_t)va_arg(arguments, void *);
         argument1 = va_arg(arguments, uint32_t);
-        break;
-    case MINEMU_IOCTL_RNG_NEXT:
-    case MINEMU_IOCTL_RNG_STATE:
+    } else if (fd == MINEMU_FD_RNG &&
+               (request == MINEMU_IOCTL_RNG_NEXT || request == MINEMU_IOCTL_RNG_STATE)) {
         argument0 = (uint32_t)(uintptr_t)va_arg(arguments, uint32_t *);
-        break;
-    case MINEMU_IOCTL_RNG_SEED:
-    case MINEMU_IOCTL_TRACE_EVENT:
+    } else if ((fd == MINEMU_FD_RNG && request == MINEMU_IOCTL_RNG_SEED) ||
+               (fd == MINEMU_FD_TRACE && request == MINEMU_IOCTL_TRACE_EVENT)) {
         argument0 = va_arg(arguments, uint32_t);
-        break;
-    default:
-        break;
     }
     va_end(arguments);
     return ioctl_svc(fd, request, argument0, argument1);
