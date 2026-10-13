@@ -6,7 +6,8 @@ BUILD := build
 KERNEL := $(BUILD)/minimum-kernel.elf
 RUNTIME := $(BUILD)/libminemu_kernel.a
 
-CORE_OBJECT := $(BUILD)/core/main.o $(BUILD)/runtime/tramp.o
+CORE_OBJECT := $(BUILD)/core/main.o $(BUILD)/runtime/tramp.o \
+	$(BUILD)/runtime/user.o $(BUILD)/runtime/svc.o
 RUNTIME_OBJECTS := \
 	$(BUILD)/runtime/block.o \
 	$(BUILD)/runtime/exception.o \

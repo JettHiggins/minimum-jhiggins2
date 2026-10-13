@@ -5,7 +5,9 @@
 
 #include <stddef.h>
 
-char line[21] = { 0 };
+#define MSH_LINE_LIMIT 25
+
+char line[MSH_LINE_LIMIT + 1] = { 0 };
 size_t length = 0;
 
 int cmpstr(char* s1, char* s2){
@@ -24,7 +26,7 @@ void execute_command(){
     return;
   }
   // Command is from 0 to length
-  char command[21] = { 0 };
+  char command[MSH_LINE_LIMIT + 1] = { 0 };
   size_t index = 0;
   line[length] = '\0';
 
@@ -44,7 +46,7 @@ void execute_command(){
   if (cmpstr(command, "echo")){
     ++index; // skip initial whitespace
     size_t echo_index = 0;
-    char echo[20] = { 0 };
+    char echo[MSH_LINE_LIMIT + 1] = { 0 };
     while (index < length){
       echo[echo_index++] = line[index++];
     }
@@ -59,7 +61,7 @@ void execute_command(){
 void reset_line(){
   length = 0;
 
-  for (int i = 0; i < 20; ++i){
+  for (int i = 0; i < (int)sizeof(line); ++i){
     line[i] = 0;
   }
   uart_printf("msh> ");
@@ -84,7 +86,7 @@ void msh(){
       execute_command();
       reset_line();
     } 
-    else if (length < 20){
+    else if (length < MSH_LINE_LIMIT){
       //Regular character
       if (c == ' ' && length == 0){
         // ignore all leading whitespaces
